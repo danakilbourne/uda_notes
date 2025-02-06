@@ -1,0 +1,520 @@
+---
+title: "Homework 1"
+author: "Dana Kilbourne"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+jupyter: python3
+---
+ 
+Professional wrestling, while not everyone's cup of tea, is big business. What started as a carnival act has turned into a global entertainment industry. Netflix recently started showing Monday Night Raw, a program from the biggest North American wrestling company, WWE -- this deal is reportedly worth \$5 billion. Like any large entity, WWE is not without competition, drama, and scandal. 
+
+## General Tips
+
+This is very much a step-by-step process. Don't go crazy trying to get everything done with as few lines as possible. Read the documentation for the AlphaVantage api! Carefully explore the pages from cagematch. There isn't a need to get too fancy with anything here -- just go with simple function and all should be good. Don't print comments, but use normal text for explanations.
+
+## Step 1
+
+In the `calls` folder, you'll find 4 text files -- these are transcripts from quarterly earnings calls. Read those files in (glob.glob will be very helpful here), with appropriate column names for ticker, quarter, and year columns; this should be done within a single function. Perform any data cleaning that you find necessary. 
+
+```{python}
+import glob
+import re
+import pandas as pd
+
+
+#create a function using regex that will use the files we got 
+def load_transcripts():
+    files = glob.glob(r"C:/Users/kilbo/Documents/Spring 2025/Unstructured Data Analytics/assignment_1/calls/*")
+    data = []
+    
+    for file in files:
+        match = re.search(r'([a-z]+)_q(\d)_(\d{4})', file, re.IGNORECASE)
+        if match:
+            ticker = match.group(1).upper()
+            quarter = f"Q{match.group(2)}"
+            year = match.group(3)
+            
+            files_df = pd.read_table(file, header=None)
+            files_df['ticker'] = ticker 
+            files_df['quarter'] = quarter 
+            files_df['year'] = year 
+            data.append(files_df)
+        else:
+            print(f"Skipping file {file} as it does not match the expected pattern.")
+            continue
+    df = pd.concat(data)
+    return df
+
+# Load the transcripts and print the first few rows
+transcripts_df = load_transcripts()
+print(transcripts_df.head())
+
+
+
+```
+
+## Step 2
+
+Use the AlphaVantage api to get daily stock prices for WWE and related tickers for the last 5 years -- pay attention to your data. You cannot use any AlphaVantage packages (i.e., you can only use requests to grab the data). Tell me about the general trend that you are seeing. I don't care which viz package you use, but plotly is solid and plotnine is good for ggplot2 users.
+
+```{python}
+import requests 
+#alpha vantage key
+av_k = "0CtBRPX7XVVxYRapC2eGP6mZ4Z6ZkXWuZCfgJt1E"
+
+av_symbol = ['WWE', 'TKO', 'DIS', 'FOX', 'CMCSA']
+
+stock = []
+
+for symbols in av_symbol:
+  url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbols}&apikey={av_k}&outputsize=full'
+  av_request = requests.get(url)
+  
+  av_json = av_request.json()
+  
+  series_data = av_json.get('Time Series (Daily)')
+  
+  meta_data = av_json['Meta Data']
+  
+  av_data = pd.DataFrame.from_dict(series_data, orient='index')
+  
+  av_data['symbol'] = meta_data['2. Symbol']
+  
+  av_data.reset_index(inplace = True)
+  
+  av_data = av_data.rename(columns = {'index':'date'})
+  
+  stock.append(av_data)
+  
+complete_stocks = pd.concat(stock)
+
+print(complete_stocks.head())
+```
+
+```{python}
+import pandas as pd
+#Filter only the most recent five years from today's date
+complete_stocks['date'] = pd.to_datetime(complete_stocks['date'])  
+complete_stocks = complete_stocks.sort_values(by='date', ascending=False)  
+
+
+from datetime import date
+
+#Get the date today
+most_recent_date = date.today()
+
+#Calculate the cutoff date (5 years before the date today)
+cutoff_date = most_recent_date - pd.DateOffset(years=5)
+
+#Create a new df and filter the dataframe
+stocks_last_5_years = complete_stocks[complete_stocks['date'] >= cutoff_date]
+
+#str(stocks_last_5_years)
+print(stocks_last_5_years.dtypes)
+
+#create a new column to use later in the graph
+stocks_last_5_years['close'] = pd.to_numeric(stocks_last_5_years['4. close'])
+stocks_last_5_years['open'] = pd.to_numeric(stocks_last_5_years['1. open'])
+
+```
+
+
+```{python}
+#this was opening in a browser so i 
+
+# import plotly.express as px
+# 
+# #creating a line plot of the stocks over the last 5 years
+# figure = px.line(
+#     stocks_last_5_years,
+#     x='date',                # x-axis is the date
+#     y='4. close',            # y-axis is the closing price
+#     color='symbol',          # Color lines based on the stock symbol
+#     title='Line Chart of Closing Stock Price by Time',  # Title of the chart
+#     labels={"4. close": "Closing Price", "date": "Date"}  # Axis labels
+# )
+# 
+# 
+# figure.show()
+
+
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(10, 6))
+
+# Group by 'symbol' and plot each one
+for symbol, group in stocks_last_5_years.groupby('symbol'):
+    plt.plot(group['date'], group['close'], label=symbol)
+
+# Adding labels and title
+plt.xlabel('Date')
+#plt.ylabel('Close Price')
+plt.title('Stock Close Prices Over Time')
+
+plt.legend()
+
+# Rotate labels 
+plt.xticks(rotation=45)
+plt.yticks(rotation=45)
+
+
+# display the plot
+plt.show()
+
+
+
+
+
+```
+WWE merged with TKO and as of September 2024, all WWE stock is listed under TKO. It seems that when WWE merged with TKO, the popularitytook off. They have a steep incline from September 2023 until today. All the other organizations have not had much growth or have had heavy losses, like Disney. CMCSA and Fox seem to have stayed about equal to the beginning. 
+
+
+## Step 3
+
+Just like every other nerdy hobby, professional wrestling draws dedicated fans. Wrestling fans often go to cagematch.net to leave reviews for matches, shows, and wrestlers. The following link contains the top 100 matches on cagematch: https://www.cagematch.net/?id=111&view=statistics
+```{python}
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+#use beautiful soup and then iterate over to find all values in the table
+
+
+# URL of the page containing the table
+url = "https://www.cagematch.net/?id=111&view=statistics"
+
+# Send a  request to the webpage
+response = requests.get(url)
+
+# see if the request went through
+if response.status_code == 200:
+    # Parse the HTML content
+    soup = BeautifulSoup(response.content, 'html.parser')
+    
+    # Locate the div with class "Table"
+    table_div = soup.find("div", {"class": "Table"})
+    
+    if table_div:
+        # locate all rows within the table
+        rows = table_div.find_all("tr")[1:]  # Skip the header row
+        
+        # extract data from each row
+        data = []
+        for row in rows:
+            columns = row.find_all("td")
+            data.append({
+                "Rank": columns[0].text.strip(),
+                "Date": columns[1].text.strip(),
+                "Promotion": columns[2].img["alt"].strip() if columns[2].img else None,
+                "Match": columns[3].text.strip(),
+                "WON Rating": columns[4].text.strip(),
+                "Match Type": columns[5].text.strip(),
+                "Rating": columns[6].text.strip(),
+                "Votes": columns[7].text.strip()
+            })
+        
+        df = pd.DataFrame(data)
+        
+      #  print(df)
+```
+
+* What is the correlation between WON ratings and cagematch ratings?
+```{python}
+import re
+
+def convert_won_rating(rating):
+  if not isinstance(rating, str):
+    return None
+  match = re.search(r'(\d+/\d+)$', rating) # literal asterisk, between 1 and 5, capturing group, non greedy quantifier, literal #asterisk, escape, star, escape, other slash, escape, digit, or digit, other slash, digit, non greedy quantifier
+  if match: 
+    return match.group(1)
+  else:
+    return None
+
+df["WON Rating Numeric"] = df["WON Rating"].apply(convert_won_rating)
+
+#print(df)
+
+
+# Convert the ratings to numeric, forcing errors to NaN
+
+df['Won_Rating_Clean'] = pd.to_numeric(df['WON Rating Numeric'], errors='coerce').astype('Int64')
+
+# map the dictionary for fractions
+fraction_map = {'1/4': 0.25, '1/2': 0.5, '3/4': 0.75}
+
+# apply the mapping to the column
+df['Won_Rating_Clean'] = df['WON Rating Numeric'].map(fraction_map)
+
+#print(df)
+#print(df.dtypes)
+
+#now do the correlation between won ratings and cagematch ratings
+
+# Calculate the correlation between WON rating and Cagematch rating
+correlation = df['Won_Rating_Clean'].corr(df['Rating'])
+
+print(f"The correlation between WON ratings and Cagematch ratings is: {correlation}")
+
+```
+
+
+** Which wrestler has the most matches in the top 100?
+```{python}
+from collections import Counter
+
+#create empty 
+all_wrestlers = []
+
+#iterate over every match to split the column match and end up with the wrestlers names
+for match in df["Match"]:
+  two = match.split(" vs. ") if " vs. " in match else [match]
+  
+  for side in two: 
+    wrestlers = side.split(" & ")
+    all_wrestlers.extend(wrestlers)
+    
+
+#print(all_wrestlers)
+
+count_wrestlers = Counter(all_wrestlers)
+most_wrestler = count_wrestlers.most_common(1)[0]
+
+
+```
+Kenny Omega has the most matches in the top 100 with 15 matches.
+
+
+*** Which promotion has the most matches in the top 100? 
+```{python}
+
+# group by the promotion & count the number
+count_promotion = df["Promotion"].value_counts()
+
+
+print(count_promotion)
+```
+The promotion with the most matches in the top 100 is New Japan Pro Wrestling with 34 matches.
+
+
+**** What is each promotion's average WON rating?
+```{python}
+# group by the category and do it by average
+grouped = df.groupby('Promotion')['Won_Rating_Clean'].mean()
+
+print(grouped)
+```
+
+
+***** Select any single match and get the comments and ratings for that match into a data frame.
+
+```{python}
+#use beautiful soup again to find all the comments of a single match
+
+url = "https://www.cagematch.net/?id=111&nr=8034&page=99"
+response = requests.get(url)
+
+soup = BeautifulSoup(response.content, "html.parser")
+
+comments_section = soup.find_all("div", class_="Comment")
+
+comments_data = []
+
+#iterate over the comments to make sure you are getting each comment with the commenters name and rating of the match
+for comment in comments_section:
+    commenter = comment.find("a")  # <a> tag has the commenter's name
+    comment_text = comment.find("div", class_="CommentContents")  # actual comment
+    if commenter and comment_text:
+        commenter_name = commenter.get_text(strip=True)
+        comment_content = comment_text.get_text(strip=True)
+        
+        rating = comment.find("span", class_="Rating") 
+        if rating:
+            rating_value = rating.get_text(strip=True)
+        else:
+            rating_value = "No rating"
+
+        comments_data.append({
+            "Commenter": commenter_name,
+            "Rating": rating_value,
+            "Comment": comment_content
+        })
+
+df_comments = pd.DataFrame(comments_data)
+
+#print(df_comments)
+
+
+```
+
+
+
+
+## Step 4
+
+You can't have matches without wrestlers. The following link contains the top 100 wrestlers, according to cagematch: https://www.cagematch.net/?id=2&view=statistics
+
+
+
+```{python}
+
+#use the statistics link but iterate through each person on the statistics page
+link = 'https://www.cagematch.net/?id=2&view=statistics'
+
+link_req = requests.get(link)
+
+link_soup = BeautifulSoup(link_req.content,"html.parser")
+
+
+wrestlers = link_soup.select('.TCol.TColSeparator a[href*="2"]')
+
+match_list = []
+#when iterating through, we must "click" on each person so that we can get the actual stats from that persons match stats page
+for people in wrestlers:
+    if people.text.strip() and not people.find('img'):
+        people_link = people['href']
+        wrestler_nr = people_link.split('nr=')[1]
+        match_statistics = f"https://www.cagematch.net/?id=2&nr={wrestler_nr}&page=22"
+        statistic_req = requests.get(match_statistics)
+        statistic_soup = BeautifulSoup(statistic_req.content, "html.parser")
+
+        match_count = statistic_soup.select('.InformationBoxContents')[0]
+        player_match_count = int(match_count.text.strip())
+        match_list.append(player_match_count)
+
+
+percent_list = []
+#iterate through all the wrestlers to find their special link with their nr (listed in each link)
+for people in wrestlers:
+    if people.text.strip() and not people.find('img'):
+        people_link = people['href']
+        wrestler_nr = people_link.split('nr=')[1]
+
+        match_statistics = f"https://www.cagematch.net/?id=2&nr={wrestler_nr}&page=22"
+
+        statistic_req = requests.get(match_statistics)
+        statistic_soup = BeautifulSoup(statistic_req.content, "html.parser")
+
+        match_count = statistic_soup.select('.InformationBoxContents')[1]
+        match_text = match_count.text.strip()
+
+        match = re.search(r'\(([\d.]+)%\)', match_text) #use regex so that it changes with each person 
+        if match:
+            player_match_percentage = float(match.group(1))  
+            percent_list.append(player_match_percentage)
+
+
+percent_list.index(max(percent_list))
+
+wrestler_names = []
+#now create the data frame from the list
+for people in wrestlers:
+    if people.text.strip() and not people.find('img'):
+        wrestler_names.append(people.text.strip())
+
+
+df_wrestlers = pd.DataFrame({
+    'Wrestler Name': wrestler_names,
+    'Match Count': match_list,
+    'Win Percentage': percent_list
+})
+
+
+#print(df_wrestlers)
+
+
+```
+ 
+
+*** Of the top 100, who has wrestled the most matches?
+```{python}
+#sort the values by the match count to get the largest
+sorted_df = df_wrestlers.sort_values(by='Match Count', ascending=False).iloc[0]
+print(sorted_df)
+
+
+```
+Ric Flair has wrestled the most matches with 4999 matches wrestled
+
+***** Of the top 100, which wrestler has the best win/loss?
+```{python}
+#sort the values by the win/loss ratio to ge tthe highest
+sorted_win_df = df_wrestlers.sort_values(by='Win Percentage', ascending=False).iloc[0]
+
+print(sorted_win_df)
+
+```
+Gene Okerlund has the best win/loss ratio with a win/loss ratio of 100%.Gene has won every match. Way to go Gene!
+
+## Step 5
+
+With all of this work out of the way, we can start getting down to strategy.
+
+First, what talent should WWE pursue? Advise carefully.
+```{python}
+#go through each one until you find someone that's living
+sorted_win_second = df_wrestlers.sort_values(by='Win Percentage', ascending=False).iloc[1]
+
+print(sorted_win_second)
+
+sorted_win_third = df_wrestlers.sort_values(by = 'Win Percentage', ascending = False).iloc[2]
+
+print(sorted_win_third)
+
+sorted_win_fourth = df_wrestlers.sort_values(by = 'Win Percentage', ascending = False).iloc[3]
+
+print(sorted_win_fourth)
+```
+The WWE should pursue the talent Sting because he has the best win/loss ratio and is still living. 
+
+
+Second, reconcile what you found in steps 3 and 4 with Netflix's relationship with WWE. Use the data from the following page to help make your case: https://wrestlenomics.com/tv-ratings/
+
+We learned in steps 3 and 4 about the WWE's comments, promotions, wrestlers, won ratings, and cage match ratings. Based on all that we have learned, the win percentage is very important when choosing talent to pursue. Bringing in someone with personality and popularity would only be beneficial. Sting is very popular because of his high win percentage. Based on this, I believe the WWE should work with him. The WWE year over year data, while better than the AEW is not growing the way it should be. I believe someone like Sting as a talented champion would make a good partnership for the WWE. 
+
+Third, do you have any further recommendations for WWE?
+Partnering with some old popular talent is a very good idea. However, it may be good to check on their careers after the WWE to see if there is someone more popular that would bring in more than just the average WWE viewers. 
+
+```{python}
+# import webbrowser
+# 
+link_fuck = "https://foass.1001010.com/london/Seth/Dana"
+# 
+# webbrowser.open(link_fuck)
+
+
+
+
+
+# URL of the webpage
+
+# Send an HTTP GET request to the website
+fuck_response = requests.get(link_fuck)
+
+# Check if the request was successful
+if response.status_code == 200:
+    # Parse the HTML content with BeautifulSoup
+    fuck_soup = BeautifulSoup(fuck_response.text, 'html.parser')
+
+    # Now, extract the sentence or content you're looking for
+    # You can inspect the webpage structure using developer tools (F12 in most browsers)
+    # If the sentence is in a specific tag (e.g., <p>, <h1>, etc.), you can extract it.
+
+    # Example: Get all text inside <p> tags (for paragraphs)
+    paragraphs = fuck_soup.find_all('h1')
+
+    for para in paragraphs:
+        print(para.get_text())
+
+    # If you're looking for a specific sentence or text, you might need to refine this logic.
+    # For example, if the sentence you want is in a specific class:
+    # sentence = soup.find('div', class_='specific-class').get_text()
+
+else:
+    print(f"Failed to retrieve the page. Status code: {response.status_code}")
+
+```
+
