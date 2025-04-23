@@ -1,0 +1,253 @@
+---
+title: "Homework 2"
+author: "Dana Kilbourne"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+jupyter: python3
+---
+
+## Task 1
+
+We are going to return to the table of the top 100 wrestlers: https://www.cagematch.net/?id=2&view=statistics. Specifically, you are going to get the ratings/comments tables for each wrestler.
+
+```{python}
+
+from bs4 import BeautifulSoup
+import requests
+import re
+import pandas as pd
+
+link = 'https://www.cagematch.net/?id=2&view=statistics'
+
+
+hot100_req = requests.get(link)
+
+#use beautiful soup and start the same way as number 4 in hw 1
+hot100_soup = BeautifulSoup(hot100_req.content, 'html.parser')
+
+all_links = hot100_soup.select('.TCol a')
+
+filtered_links = [link for link in all_links if link['href'].count('&') == 2]
+#create empty data frame
+df_wrestlers = []
+
+#loop over the wrestlers to get their names and ids so we can use it later to use id in each link
+for i in filtered_links:
+    wrestler_name = i.text.strip()
+    wrestler_href = i['href']
+    
+    ID = re.search(r'nr=(\d+)', wrestler_href).group(1)
+    #get the wrestler names and IDs 
+    df_wrestlers.append({
+        "Name": wrestler_name,
+        "ID": ID,
+    })
+
+df_wrestlers = pd.DataFrame(df_wrestlers) #put them in a dataframe
+
+match_comments = []
+# "click " each wrestlers based on their ID known as nr in the link and collect the comments and ratings
+for i in df_wrestlers['ID']:
+    link = f'https://www.cagematch.net/?id=2&nr={i}&page=99'    
+    hot100_req = requests.get(link) 
+    hot100_soup = BeautifulSoup(hot100_req.content, 'html.parser')
+    num_comments = hot100_soup.select('.CommentHeader')
+    wrestler_name = df_wrestlers[df_wrestlers['ID'] == i]['Name'].values[0]
+    for com in range(len(num_comments)):
+      comments = {'ID': i,
+            'Name': wrestler_name,
+            'User': hot100_soup.select('.CommentHeader')[com].text,'Comment': hot100_soup.select('.CommentContents')[com].text}
+      match_comments.append(comments)
+
+match_comments = pd.DataFrame(match_comments)
+
+#extract all the infomration we need by using regular expressions
+match_comments['Date'] = match_comments['User'].str.extract(r'(\d{2}\.\d{2}\.\d{4})')
+
+match_comments['User'] = match_comments['User'].str.replace(r' wrote.*', '', regex=True)
+
+match_comments['Rating']=match_comments['Comment'].str.extract(r'(\[\d+\.\d+\]|\[\d\.\d\])')
+match_comments['Rating'] = match_comments['Rating'].str.replace(r'\[(\d+\.\d+|\d\.\d)\]', r'\1', regex=True)
+
+match_comments['Comment'] = match_comments['Comment'].str.replace(r'\[\d+\.\d+\]|\[\d\.\d\]', '', regex=True)
+
+#remove the quotation marks
+def remove_first_and_last_quotes(text):
+    text = re.sub(r'"', '', text, count=1)
+    if text.endswith('"'):
+        text = text[:-1]
+    
+    return text
+match_comments['Comment'] = match_comments['Comment'].apply(remove_first_and_last_quotes)
+
+print(match_comments.head())
+
+
+```
+This shows a data frame of each wrestler with their ratings and comments attached. 
+
+```{python}
+#use lang detect to get rid of the german comments
+
+from langdetect import detect
+
+#function to detect language and return True if the comment is not in German
+def is_not_german(Comment):
+    try:
+        return detect(Comment)  #detect and check if it's not German ('de')
+    except:
+        return True  #if language detection fails, keep the comment
+```
+
+```{python}
+match_comments['Comment'] = match_comments['Comment'].str.replace("^https.*", "", regex=True)
+
+#filter out German comments
+match_comments['test'] = match_comments['Comment'].apply(is_not_german)
+
+```
+
+
+```{python}
+#only keep in english comments
+df_filtered = match_comments[match_comments['test'] == "en"]
+```
+
+
+## Task 2
+
+Perform any form of sentiment analysis. What is the relationship between a reviewer's sentiment and their rating?
+
+```{python}
+#use text blob
+
+#print(match_comments.dtypes)
+
+#transform the rating to numeric in order to graph 
+df_filtered['Rating'] = pd.to_numeric(df_filtered['Rating'])
+
+from textblob import TextBlob
+
+#create a function to get the sentiment
+def get_sentiment(text):
+    return TextBlob(text).sentiment.polarity
+
+#apply the sentiment analysis to each comment
+df_filtered['Sentiment'] = df_filtered['Comment'].apply(get_sentiment)
+
+#correlation between ratings and sentiment
+correlation = df_filtered['Rating'].corr(df_filtered['Sentiment'])
+print(f"Correlation between ratings and comment sentiment: {correlation}")
+
+
+
+import matplotlib.pyplot as plt
+
+
+
+#scatter plot of Sentiment vs Rating
+plt.figure(figsize=(8, 6))
+plt.scatter(df_filtered['Rating'], df_filtered['Sentiment'], color='blue', alpha=0.7)
+
+# add labels
+plt.title('Sentiment vs Rating', fontsize=16)
+plt.xlabel('Rating', fontsize=12)
+plt.ylabel('Sentiment', fontsize=12)
+
+#show the plot
+plt.show()
+
+
+
+```
+The correlation between ratings and comment sentiment is 0.288. This is a weak positive correlation, so we must conclude that there is not a strong relationship between Rating and Comment Sentiment. This is proved in the graph above, there is no clear correlation or relationship in this scatter plot. 
+
+
+## Task 3
+
+Perform any type of topic modeling on the comments. What are the main topics of the comments? How can you use those topics to understand what people value?
+
+```{python}
+import sklearn
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+import re
+
+# function to remove names from comments based on the 'names' column
+def remove_names_from_comments(df_filtered):
+    # take out the 'names' column and split them into a list
+    names = df_filtered['Name'].split(' ')  #split by a space 
+    
+    #remove the names from the comment
+    cleaned_comment = df_filtered['Comment']
+    
+    for Name in names:
+        #use regex to remove both first and last names (word boundary \b ensures we match whole names)
+        cleaned_comment = re.sub(r'\b' + re.escape(Name) + r'\b', '', cleaned_comment)
+    
+    return cleaned_comment
+
+# Apply the function to remove names from the 'comments' column
+df_filtered['cleaned_comments'] = df_filtered.apply(remove_names_from_comments, axis=1)
+
+# Print the DataFrame with cleaned comments
+print(df_filtered[['Comment', 'cleaned_comments']].head())
+
+###find the main topics in the comments section###
+
+# preprocess and vectorize the comments using TF-IDF
+vectorizer = TfidfVectorizer(stop_words='english')  # remove stopwords like 'the', 'and', etc.
+X = vectorizer.fit_transform(df_filtered['Comment'])
+
+# apply LDA to extract topics
+lda = LatentDirichletAllocation(n_components=3, random_state=42)  #extract 3 topics
+lda.fit(X)
+
+# show the top words for each topic
+n_top_words = 10  # Number of top words to display for each topic
+feature_names = vectorizer.get_feature_names_out()
+
+for topic_idx, topic in enumerate(lda.components_):
+    print(f"Topic #{topic_idx + 1}:")
+    print(" ".join([feature_names[i] for i in topic.argsort()[:-n_top_words - 1:-1]]))
+
+
+
+
+
+#  Visualize the topics
+# import numpy as np
+# 
+# # Generate the topic-word distribution matrix
+# topic_word_distribution = lda.components_
+
+```
+The main topics of the comments are about the best wrestler being good and having the greatest match. People seem to value the wrestling match. 
+
+
+```{python}
+
+#extra credit
+link_fuck = "https://foass.1001010.com/given/Dana"
+
+
+# Send an HTTP GET request to the website
+fuck_response = requests.get(link_fuck)
+
+# Check if the request was successful
+if fuck_response.status_code == 200:
+    fuck_soup = BeautifulSoup(fuck_response.text, 'html.parser')
+
+    paragraphs = fuck_soup.find_all('h1')
+
+    for para in paragraphs:
+        print(para.get_text())
+
+
+else:
+    print(f"Failed to retrieve the page. Status code: {response.status_code}")
+```
+

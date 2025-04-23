@@ -12,13 +12,15 @@ jupyter: python3
 The main point of my project is to answer two questions: 
 Is my music taste basic compared to the entire world? Was my Apple Music Replay accurate? 
 
-I found a data table on a website showing all of the top songs from 2024 on Spotify world wide. I scraped this data table to use it to compare the songs, artists, and albums I listened to in 2024 to the songs the entire world was listening to.  
+I found a data table on kworb.net showing all of the top songs from 2024 on Spotify world wide. I scraped this data table to use it to compare the songs, artists, and albums I listened to in 2024 to the songs the entire world was listening to.  
 
 When Apple Music Replay came out last year, I requested my data to be sent to me from Apple Music. Using this data, I am going to find out if the Apple Music Replay (their version of Spotify Wrapped) was accurate according to the data they have. 
 
 
-## Finding and Cleaning Data
+
+## Finding and Cleaning 2024 Spotify Data
 Use a webpage to scrape the top songs from 2024
+
 ```{python}
 import requests
 import pandas as pd
@@ -116,8 +118,9 @@ dana_songs_2024.groupby('artist').size().sort_values(ascending=False).head(10)
 (2489 - 532)/532
 
 ```
-The main point of my project is to find out how basic I am compared to the rest of the world. Do I have a lot of the same top artists as everyone in the world? How do my favorite artists compare to the world's favorite artists? The 10 artists in the world with the most streamed songs on Spotify in 2024 are Taylor Swift, Peso Pluma, Tito Double P, Ariana Grande, Billie Eilish, Sabrina Carpenter, Arijit Singh, Kendrick Lamar, SEVENTEEN, and Future. My top 10 artists that are also in Spotify's are: Taylor Swift and Sabrina Carpenter. Taylor Swift is the top artist in the world with 27 songs of the most streamed songs on Spotify in 2024 and she is my top artist, I played songs of Swift's 2,489 times last year, which is 3.67 times more than my next artist (Gracie Abrams). 
+The main point of my project is to find out how basic I am compared to the rest of the world. Do I have a lot of the same top artists as everyone in the world? How do my favorite artists compare to the world's favorite artists? The 10 artists in the world with the most streamed songs on Spotify in 2024 are Taylor Swift, Peso Pluma, Tito Double P, Ariana Grande, Billie Eilish, Sabrina Carpenter, Arijit Singh, Kendrick Lamar, SEVENTEEN, and Future. My top 10 artists that are also in Spotify's are: Taylor Swift and Sabrina Carpenter. Taylor Swift is the top artist in the world with 27 songs of the most streamed songs on Spotify in 2024 and she is my top artist, I played songs of Swift's 2,489 times last year, which is 3.67 times more than my next artist (Gracie Abrams). However, this may be a weak comparison because Swift's discography is much more vast than Abram's.
 
+## Top songs from both data frames
 ```{python}
 top_songs_2024[['Artist and Title', 'Streams']].head(10)
 dana_songs_2024.groupby('Track and Artist').size().sort_values(ascending=False).head(10)
@@ -125,8 +128,9 @@ dana_songs_2024.groupby('Track and Artist').size().sort_values(ascending=False).
 ```
 None of the world's top ten songs based on the most streams correspond with my top ten songs. 
 
-Also, according to Apple Music's Replay (similar to Spotify Wrapped) my top 5 songs are: "Not Strong Enough" by boygenius (97 plays), "Cool About It" by boygenius (89 plays), "Risk" by Gracie Abrams (86 plays), "Satanist" by boygenius (82 plays), and "The Smallest Man Who Ever Lived" by Taylor Swift (78 plays). The top 5 in my Apple Music data are "Risk" by Gracie Abrams is the top song appearing 51 times, followed by "Satanist" by boygenius appearing 45 times, "Cool About It" by boygenius appearing 45 times, "Not Strong Enough" by boygenius appearing 44 times, and "The Smallest Man Who Ever Lived" appearing 41 times. There is clearly a discrepancy between each data point here, and one is wrong. 
+Also, according to Apple Music's Replay (similar to Spotify Wrapped) my top 5 songs are: "Not Strong Enough" by boygenius (97 plays), "Cool About It" by boygenius (89 plays), "Risk" by Gracie Abrams (86 plays), "Satanist" by boygenius (82 plays), and "The Smallest Man Who Ever Lived" by Taylor Swift (78 plays). The top 5 in my Apple Music data are "Risk" by Gracie Abrams is the top song appearing 51 times, followed by "Satanist" by boygenius appearing 45 times, "Cool About It" by boygenius appearing 45 times, "Not Strong Enough" by boygenius appearing 44 times, and "The Smallest Man Who Ever Lived" appearing 41 times. There is clearly a discrepancy between each data point here, and one must be wrong. 
 
+## Visualize the top five songs
 ```{python}
 import pandas as pd
 import plotly.express as px
@@ -151,7 +155,7 @@ plt.tight_layout()  # make everything fit on the graph
 plt.show()
 
 ```
-Here is a visual showing how many times I listened to my top 5 songs. Compared to my Apply Music Replay, this is very different as explained above. 
+Here is a visual showing how many times I listened to my top 5 songs. Compared to my Apple Music Replay, this is very different as explained above. 
 
 ```{python}
 #create the bar chart
