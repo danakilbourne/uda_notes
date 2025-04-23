@@ -1,0 +1,304 @@
+---
+title: "Final Report"
+author: "Dana Kilbourne"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+jupyter: python3
+---
+## Introduction
+The main point of my project is to answer two questions: 
+Is my music taste basic compared to the entire world? Was my Apple Music Replay accurate? 
+
+I found a data table on a website showing all of the top songs from 2024 on Spotify world wide. I scraped this data table to use it to compare the songs, artists, and albums I listened to in 2024 to the songs the entire world was listening to.  
+
+When Apple Music Replay came out last year, I requested my data to be sent to me from Apple Music. Using this data, I am going to find out if the Apple Music Replay (their version of Spotify Wrapped) was accurate according to the data they have. 
+
+
+## Finding and Cleaning Data
+Use a webpage to scrape the top songs from 2024
+```{python}
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+
+# get the webpage content
+url = "https://kworb.net/spotify/songs_2024.html"
+response = requests.get(url)
+
+#beautiful soup 
+soup = BeautifulSoup(response.content, "html.parser")
+
+# find the table on the page (based on class or tag)
+table = soup.find("table")
+
+# extract the headers (column names) from the table
+headers = []
+for th in table.find_all("th"):
+    headers.append(th.get_text(strip=True))
+
+# extract rows of data from the table
+rows = []
+for tr in table.find_all("tr")[1:]:  # Skip the first row (header)
+    cols = tr.find_all("td")
+    row = [col.get_text(strip=True) for col in cols]
+    rows.append(row)
+
+# convert the list of rows into a DataFrame
+top_songs_2024 = pd.DataFrame(rows, columns=headers)
+
+# display the DataFrame
+print(top_songs_2024.head())
+
+## clean the data - we want artist and title split
+# Assuming the "Artist - Title" column is named 'Song' or similar
+top_songs_2024[['artist', 'title']] = top_songs_2024['Artist and Title'].str.split(' - ', expand=True)
+
+print(top_songs_2024.head())
+
+#change the data type to numeric and get rid of the commas using regex for graphing later
+
+print(top_songs_2024['Streams'].dtype)
+
+top_songs_2024['Streams'] = top_songs_2024['Streams'].replace({',': '', '$': '', ' ': ''}, regex=True)
+
+
+top_songs_2024['Streams'] = pd.to_numeric(top_songs_2024['Streams'], errors = 'coerce')
+
+
+print(top_songs_2024.head())
+
+```
+
+
+
+## My Apple Music Data
+
+```{python}
+##### Apple Music Play Activity
+
+### actual song history
+dana_song_history = pd.read_csv('C:/Users/kilbo/Documents/Spring 2025/Unstructured Data Analytics/Apple_Media_Services/Apple Music Activity/Apple Music - Play History Daily Tracks.csv')
+# clean the data 
+#only want 2024
+# Convert the date column to string, then to datetime
+dana_song_history['date'] = pd.to_datetime(dana_song_history['Date Played'].astype(str), format='%Y%m%d')
+
+# Filter for the year 2024
+dana_songs_2024 = dana_song_history[dana_song_history['date'].dt.year == 2024]
+
+#print(dana_songs_2024.head())
+
+
+
+#print(dana_songs_2024['Track Description'].dtype)
+
+
+dana_songs_2024['Track and Artist'] = dana_songs_2024['Track Description'].apply(str)
+
+
+# split the track columns so I can get the song and track title
+dana_songs_2024[['artist', 'song', 'junk']] = dana_songs_2024['Track and Artist'].str.split(' - ', expand=True)
+
+print(dana_songs_2024[['artist', 'song']].head())
+```
+
+## Top artists from both data frames
+
+```{python}
+top_songs_2024.groupby('artist').size().sort_values(ascending=False).head(10)
+dana_songs_2024.groupby('artist').size().sort_values(ascending=False).head(10)
+
+#how much more did I listen to my number one artist compared to my number 2 artist
+
+(2489 - 532)/532
+
+```
+The main point of my project is to find out how basic I am compared to the rest of the world. Do I have a lot of the same top artists as everyone in the world? How do my favorite artists compare to the world's favorite artists? The 10 artists in the world with the most streamed songs on Spotify in 2024 are Taylor Swift, Peso Pluma, Tito Double P, Ariana Grande, Billie Eilish, Sabrina Carpenter, Arijit Singh, Kendrick Lamar, SEVENTEEN, and Future. My top 10 artists that are also in Spotify's are: Taylor Swift and Sabrina Carpenter. Taylor Swift is the top artist in the world with 27 songs of the most streamed songs on Spotify in 2024 and she is my top artist, I played songs of Swift's 2,489 times last year, which is 3.67 times more than my next artist (Gracie Abrams). 
+
+```{python}
+top_songs_2024[['Artist and Title', 'Streams']].head(10)
+dana_songs_2024.groupby('Track and Artist').size().sort_values(ascending=False).head(10)
+
+```
+None of the world's top ten songs based on the most streams correspond with my top ten songs. 
+
+Also, according to Apple Music's Replay (similar to Spotify Wrapped) my top 5 songs are: "Not Strong Enough" by boygenius (97 plays), "Cool About It" by boygenius (89 plays), "Risk" by Gracie Abrams (86 plays), "Satanist" by boygenius (82 plays), and "The Smallest Man Who Ever Lived" by Taylor Swift (78 plays). The top 5 in my Apple Music data are "Risk" by Gracie Abrams is the top song appearing 51 times, followed by "Satanist" by boygenius appearing 45 times, "Cool About It" by boygenius appearing 45 times, "Not Strong Enough" by boygenius appearing 44 times, and "The Smallest Man Who Ever Lived" appearing 41 times. There is clearly a discrepancy between each data point here, and one is wrong. 
+
+```{python}
+import pandas as pd
+import plotly.express as px
+
+import matplotlib.pyplot as plt
+
+# group by, sort them, and select the top 5
+top_songs = dana_songs_2024.groupby('song').size().sort_values(ascending=False).head(5)
+
+
+plt.figure(figsize=(5, 4))  
+plt.bar(top_songs.index, top_songs.values, color='black')
+
+#add details
+plt.title("Dana's Top 5 Songs in 2024", fontsize=16)
+plt.xlabel('Song', fontsize=14)
+plt.ylabel('Song Count', fontsize=14)
+plt.xticks(rotation=30, ha='right')  #rotate x labels to read
+plt.tight_layout()  # make everything fit on the graph
+
+# Show the plot
+plt.show()
+
+```
+Here is a visual showing how many times I listened to my top 5 songs. Compared to my Apply Music Replay, this is very different as explained above. 
+
+```{python}
+#create the bar chart
+plt.figure(figsize=(5, 4))
+
+top_five = top_songs_2024.head(5)
+
+plt.bar(top_five['title'], top_five['Streams'], color='black')
+
+# customize
+plt.title('Top 5 Songs by Streams')
+plt.xlabel('Song Titles', fontsize = 14)
+plt.ylabel('Number of Streams (in millions)', fontsize = 14)
+plt.xticks(rotation=30, ha='right')
+plt.tight_layout() 
+
+#display the chart
+plt.show()
+```
+
+## My Top Artists
+```{python}
+
+
+dana_top_artists = dana_songs_2024.groupby('artist')['Play Duration Milliseconds'].sum().reset_index()
+
+dana_top_artists = dana_top_artists.sort_values(by='Play Duration Milliseconds', ascending=False)
+
+# print(dana_top_artists)
+
+dana_top_artists['Minutes Played'] = dana_top_artists['Play Duration Milliseconds'] / 60000  # Convert to minutes
+
+dana_top_artists.sort_values(by = 'Minutes Played', ascending = False).round().head(6)
+
+```
+This section is about comparing my Apple Music Replay to the data that I have received from Apple Music. As far as my top artists go, Apple Music Replay is sort of accurate. It has Taylor Swift as my top artist with 10,582 minutes listened. My data shows 10,811 minutes listened. This is a small error, like most of them. boygenius is next on both lists and is only 2 minutes apart from each other. Gracie Abrams is third on both lists and again, is only about 16 minutes away. However, Apple Music Replay shows Stevie Nicks as my fourth most popular artist and Fleetwood Mac as my fifth with 1,253 minutes and 1,244 minutes, respectively. My data exploration shows Fleetwood Mac at the fourth spot with Sabrina Carpenter sneaking into the fifth, leaving Stevie Nicks out of my top five artists.
+
+
+## What is the correlation between my top songs and the total number of streams?
+Am I listening to not only the most popular songs, but am I listening to them the same amount as everyone else?
+```{python}
+
+import seaborn as sns
+# Rename the 'Title' column in your music data to 'Song' for comparison
+top_songs_2024 = top_songs_2024.rename(columns = {'title': 'song'})
+
+dana_top_songs = dana_songs_2024.groupby(['song', 'artist']).size().reset_index(name='Count')
+
+# Merge the two dataframes on 'Song' and 'Artist' to find matches
+matching_songs_df = pd.merge(dana_top_songs, top_songs_2024, on=['song', 'artist'], how='inner')
+
+# Rank the common songs by streams (or by plays in your collection if preferred)
+matching_songs_df = matching_songs_df.sort_values(by='Streams', ascending=False)  # Sort by 'Streams'
+
+# Show the most popular songs in both datasets
+print(matching_songs_df[['song', 'artist', 'Streams', 'Count']])
+
+#correlation between the total streams and my number of plays for a song
+correlation = matching_songs_df['Streams'].corr(matching_songs_df['Count'])
+print(f"Correlation between number of streams and my number of plays is: {correlation}")
+
+
+
+import matplotlib.pyplot as plt
+
+
+
+#scatter plot of Sentiment vs Rating
+plt.figure(figsize=(5, 3))
+plt.scatter(matching_songs_df['Streams'],matching_songs_df['Count'], color='black', alpha=0.7)
+sns.regplot(x='Streams', y='Count', data=matching_songs_df, scatter=True, line_kws={'color': 'black'}, ci=None)
+
+
+# select song for labeling
+x_value = matching_songs_df['Streams'][18]
+y_value = matching_songs_df['Count'][18]
+song_title = matching_songs_df['song'][18]  # Only the song title
+
+# Label the point with the song title only (no artist)
+# Add some offset to avoid overlap with the point
+plt.text(x_value + 50000, y_value, song_title, horizontalalignment='right', size=12, color='black')
+
+# select another song for labeling
+x_value1 = matching_songs_df['Streams'][4]
+y_value1 = matching_songs_df['Count'][4]
+song_title1 = matching_songs_df['song'][4]  # Only the song title
+
+# Label the point with the song title only (no artist)
+# Add some offset to avoid overlap with the point
+plt.text(x_value1 + 50000, y_value1, song_title1, horizontalalignment='right', size=12, color='black')
+
+# select another song for labeling
+x_value2 = matching_songs_df['Streams'][44]
+y_value2 = matching_songs_df['Count'][44]
+song_title2 = matching_songs_df['song'][44]  # Only the song title
+
+# Label the point with the song title only (no artist)
+# Add some offset to avoid overlap with the point
+plt.text(x_value2 + 50000, y_value2, song_title2, horizontalalignment='right', size=12, color='black')
+
+# add labels
+plt.title('Streams vs My Plays', fontsize=16)
+plt.xlabel('Streams', fontsize=12)
+plt.ylabel('Count of my Plays', fontsize=12)
+
+#show the plot
+plt.show()
+
+
+```
+This graph shows the songs that overlap between the songs I have played and the most streamed songs in the world. I included labels of a few of the data points to show the most extreme outliers of all the variables: a song that I listened to a lot that did not have a lot of streams, a song that I did not listen to a lot but did have a lot of streams, and a song that I listened to a lot and it did have a lot of streams too. There is a slight negative correlation (-0.14) between the count of my song plays and the number of total streams for the song. There is no clear correlation between the count of my songs played and the total number of streams for a song. Therefore, we must conclude that I do not have a basic music taste. 
+
+## Conclusion
+According to my correlation between my listens of a song and the number of streams, my music taste is not basic. Out of the ten top artists in the world and my top ten artists, there are only two that overlap. 20% does not make someone basic. Out of the top five songs in the world and my top five songs, there are no songs that over lap. That also concludes my music taste not being basic. 
+
+
+And, as always: 
+```{python}
+# 
+link_fuck = "https://foass.1001010.com/this/Dana"
+
+
+# URL of the webpage
+
+# Send an HTTP GET request to the website
+fuck_response = requests.get(link_fuck)
+
+# Check if the request was successful
+if response.status_code == 200:
+    # Parse the HTML content with BeautifulSoup
+    fuck_soup = BeautifulSoup(fuck_response.text, 'html.parser')
+
+    # Now, extract the sentence or content you're looking for
+    # You can inspect the webpage structure using developer tools (F12 in most browsers)
+    # If the sentence is in a specific tag (e.g., <p>, <h1>, etc.), you can extract it.
+
+    # Example: Get all text inside <p> tags (for paragraphs)
+    paragraphs = fuck_soup.find_all('h1')
+
+    for para in paragraphs:
+        print(para.get_text())
+
+    # If you're looking for a specific sentence or text, you might need to refine this logic.
+    # For example, if the sentence you want is in a specific class:
+    # sentence = soup.find('div', class_='specific-class').get_text()
+
+else:
+    print(f"Failed to retrieve the page. Status code: {response.status_code}")
+```
+
